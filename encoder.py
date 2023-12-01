@@ -96,8 +96,6 @@ class Encoder(nn.Module):
         self.embedding_size = embedding_size
         self.pe = PositionalEncoder(dropout=0.1, max_seq_len=view_size)
 
-        self.transformer_block = nn.Module
-
         self.layers = nn.ModuleList([
                 TransformerBlock(
                     view_size, embedding_size, n_heads, dropout=dropout, fwex=fwex,

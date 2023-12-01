@@ -4,7 +4,9 @@ from env import Env
 from tqdm import tqdm
 import numpy as np
 import random
+import pickle
 import torch
+import os
 
 
 class Agent:
@@ -12,27 +14,27 @@ class Agent:
             self,
             model_name="elysium",
 
-            embeddings=128,
+            embeddings=256,
             layers=1,
             heads=4,
             fwex=256,
             dropout=0.1,
-            neurons=512,
-            lr=1e-4,
+            neurons=1024,
+            lr=5e-5,
             mini_batch_size=32,
 
             epsilon_max=1,
             epsilon_min=0.005,
-            epsilon_decay=0.87,
+            epsilon_decay=0.88,
             discount=0.98,
             capacity=10_000,
 
-            n_eps=100,
+            n_eps=1_000,
             update_freq=500,
             show_every=5,
             render=True,
 
-            fee=0.002,
+            fee=0.005,
             trading_period=150,
     ):
         self.env = Env(fee, trading_period)
@@ -88,14 +90,30 @@ class Agent:
         return self.policy_net.loss
 
     def train(self):
-        print(f"====== Model Details: {self.model_name} ======")
-        print(f"Decay: {self.decay}")
-        print(f"Learning Rate: {self.lr}")
-        print(f"Discount: {self.discount}")
-        print(f"Capacity: {self.capacity}")
-        print("=====================================")
+
+        model_info = f"====== Model Details: {self.model_name} ======\n" \
+            f"Model Parameters:\n" \
+            f"  Embeddings: {self.target_net.embeddings}\n" \
+            f"  Layers: {self.target_net.layers}\n" \
+            f"  Heads: {self.target_net.heads}\n" \
+            f"  Fwex: {self.target_net.fwex}\n" \
+            f"  Dropout: {self.target_net.dropout}\n" \
+            f"  Neurons: {self.target_net.neurons}\n" \
+            f"  Learning Rate: {self.lr}\n" \
+            f"\n" \
+            f"RL Parameters:\n" \
+            f"  Update Frequency: {self.update_freq}\n" \
+            f"  Decay: {self.decay}\n" \
+            f"  Discount: {self.discount}\n" \
+            f"  Capacity: {self.capacity}\n" \
+            f"\n" \
+            f"Trading Parameters:\n" \
+            f"  Fee: {self.env.fee}\n" \
+            "====================================="
+        print(model_info)
         self.fill_memory()
-        path = f"data/{self.model_name}"
+
+        path = f"models/{self.model_name}"
 
         with open(path + ".log", "a") as f:
             step_count = 0
@@ -103,58 +121,72 @@ class Agent:
             data = []
             losses = []
 
-            for ep in range(self.n_eps):
+            try:
+                for ep in range(self.n_eps):
+                    done = False
+                    state = self.env.reset()
+                    pl = 1
+                    loss = None
+
+                    while not done:
+                        action = self.select_actions(state)
+                        next_state, _, reward, done = self.env.step(action)
+                        self.replay_mem.store(state, action, reward, next_state)
+                        loss = self.learn(step_count)
+
+                        pl = reward
+                        state = next_state
+                        step_count += 1
+
+                    # Save train data
+                    reward = round(pl, 4)
+                    data.append([ep, loss, reward])
+                    rewards.append(reward)
+                    avg_reward = np.mean(rewards[-25:]).round(4)
+                    lr = self.target_net.optimizer.param_groups[0]['lr']
+                    loss = loss.detach().numpy().round(4)
+                    losses.append(loss)
+                    avg_loss = np.mean(losses[-25:]).round(4)
+
+                    f.write(f"{ep},{reward},{lr:.4e},{loss:.4f},{avg_reward},{avg_loss:.4f},{self.epsilon}\n")
+                    print(f"Ep: {ep}, Reward: {reward}, Lr: {lr:.4e}, Loss: {loss:.4f}, "
+                          f"Reward (avg): {avg_reward},  Loss (avg): {avg_loss:.4f}, Epsilon: {self.epsilon}")
+
+                    if ep % self.show_every == 0 and self.render:
+                        self.env.render()
+
+                    self.update_epsilon(ep)
+                    self.target_net.scheduler.step()
+            except KeyboardInterrupt:
+                print("Training interrupted, saving model...")
+                self.save(self.model_name)
+
+        self.save(self.model_name)
+
+    def test(self):
+        rewards = []
+        p = "data/test"
+
+        for file in os.listdir(p):
+            new_path = p
+            if ".DS" not in file:
+                new_path = os.path.join(new_path, file)
+
+                file = open(new_path, "rb")
+                s = pickle.load(file)
+
                 done = False
-                state = self.env.reset()
-                pl = 1
-                loss = None
+                state = self.env.load_stock(s)
+                reward = 0
 
                 while not done:
                     action = self.select_actions(state)
                     next_state, _, reward, done = self.env.step(action)
-                    self.replay_mem.store(state, action, reward, next_state)
-                    loss = self.learn(step_count)
-
-                    pl = reward
                     state = next_state
-                    step_count += 1
 
-                # Save train data
-                reward = round(pl, 4)
-                data.append([ep, loss, reward])
                 rewards.append(reward)
-                avg_reward = np.mean(rewards[-25:]).round(4)
-                lr = self.target_net.optimizer.param_groups[0]['lr']
-                loss = loss.detach().numpy().round(4)
-                losses.append(loss)
-                avg_loss = np.mean(losses[-25:]).round(4)
-                self.target_net.scheduler.step(ep)
-                self.update_epsilon(ep)
-
-                f.write(f"{ep},{reward},{self.epsilon}\n")
-                print(f"Ep: {ep}, Reward: {reward}, Lr: {lr:.6e}, Loss: {loss:.4f}, "
-                      f"Reward (avg): {avg_reward},  Loss (avg): {avg_loss:.4f}, Epsilon: {self.epsilon}")
-
-                if ep % self.show_every == 0 and self.render:
-                    self.env.render()
-
-        self.save(self.model_name)
-
-    def test(self, test_eps=20):
-        rewards = []
-
-        for ep in range(test_eps):
-            done = False
-            state = self.env.reset()
-            reward = 0
-
-            while not done:
-                action = self.select_actions(state)
-                next_state, _, reward, done = self.env.step(action)
-                reward += reward
-                state = next_state
-
-            rewards.append(reward)
+                # self.env.render(True)
+        return rewards
 
     def select_actions(self, state):
         epsilon = max(self.epsilon, self.epsilon_min)

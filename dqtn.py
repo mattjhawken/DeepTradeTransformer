@@ -2,7 +2,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch import nn
 from encoder import Encoder
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import StepLR
 
 
 class DQTN(nn.Module):
@@ -12,6 +12,12 @@ class DQTN(nn.Module):
         self.dims = dims
         self.lr = lr
         self.dropout = dropout
+
+        self.heads = heads
+        self.embeddings = embeddings
+        self.layers = layers
+        self.fwex = fwex
+        self.neurons = neurons
 
         self.encoder = Encoder(embeddings, layers, heads, fwex, dropout, 186)
 
@@ -24,7 +30,7 @@ class DQTN(nn.Module):
 
         self.loss = None
         self.optimizer = optim.Adam(self.parameters(), lr=lr)
-        self.scheduler = CosineAnnealingWarmRestarts(self.optimizer, step_size=10, gamma=0.75)
+        self.scheduler = StepLR(self.optimizer, 10, 0.9)
 
     def forward(self, x):
         x = self.flat(self.encoder(x))

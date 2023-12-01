@@ -7,27 +7,21 @@ import torch
 
 
 def plot_params(a):
-    activations = []
+    model_name = "elysium-v1"
+    with open(f"models/{model_name}.log") as f:
+        a = f.read().split("\n")
+        rewards = [float(c.split(",")[1]) for c in a[:-1]]
 
-    def hook_function(module, _input, _output):
-        activations.append(_output.detach().cpu().numpy())
-
-    hook_handles = []
-    for layer in a.target_net.children():
-        handle = layer.register_forward_hook(hook_function)
-        hook_handles.append(handle)
-
-    sample_input = torch.randn((32, 4, 186))
-    a.target_net(sample_input)
-
-    activations = np.array([list(activations[i]) for i in range(len(activations))])
-    plt.imshow(activations, cmap="viridis", aspect="auto")
+    # sample_input = torch.randn((32, 4, 186))
+    # a.target_net(sample_input)
+    # plt.imshow(activations, cmap="viridis", aspect="auto")
+    plt.title(model_name)
     plt.show()
 
 
 def load_stocks(tickers):
     for ticker in tickers:
-        path = f"data/assets/{ticker.lower()}"
+        path = f"data/test/{ticker.lower()}"
         s = Stock(ticker, "6000d", "1d")
         file = open(path, "wb")
         pickle.dump(s, file)
@@ -46,11 +40,13 @@ def plot_stocks(tickers):
         plt.show()
 
 
-agent = Agent("elysium-v1")
+agent = Agent("elysium-v1.0.1")
+# agent.test()
 agent.train()
 
-tickers = ["BA", "CNI", "GC=F", "GEO", "ILMN", "NG=F", "OHI", "REI-UN.TO", "SRU-UN.TO",
-           "TLT", "MPW", "CRSP"]
+# tickers = ["BA", "CNI", "GC=F", "GEO", "ILMN", "NG=F", "OHI", "REI-UN.TO", "SRU-UN.TO",
+#            "TLT", "CM.TO", "SI=F", "XEG.TO", "XMA.TO"]
+# tickers = ["XUT.TO", "ZUH.TO", "XRE.TO", "ZEB.TO", "CRSP", "MPW", "GF=F", "NTR.TO"]
 # plot_stocks(tickers)
 # plot_params(agent)
 # load_stocks(tickers)

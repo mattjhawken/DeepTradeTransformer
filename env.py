@@ -1,6 +1,5 @@
 from stock import Stock
 import matplotlib.pyplot as plt
-import numpy as np
 import random
 import pickle
 import os
@@ -28,10 +27,16 @@ class Env:
         self.load_data()
         self.reset()
 
-    def reset(self):
-        self.stock = random.choice(self.stocks)
+    def load_stock(self, stock):
+        self.stock = stock
+        state = self.reset(flip=False, stock=False)
+        return state
 
-        if random.random() > 0.5:
+    def reset(self, flip=True, stock=True):
+        if stock:
+            self.stock = random.choice(self.stocks)
+
+        if flip and random.random() > 0.5:
             self.stock.reverse()
 
         self.actions = []
@@ -63,7 +68,7 @@ class Env:
                 self.in_trade = True
                 self.profit *= (1 - self.fee + p_change)
             else:
-                self.profit *= (1 - (p_change/4))
+                self.profit *= (1 - (p_change/5))
         else:
             if action == 0:
                 self.in_trade = False
@@ -83,7 +88,7 @@ class Env:
 
         return next_state, action, self.profit, done
 
-    def render(self):
+    def render(self, wait=False):
         fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [2, 1]})
         da_range = list(range(self.start, self.end))
 
@@ -95,11 +100,14 @@ class Env:
         ax2.plot(da_range, self.rewards)
 
         plt.draw()
-        plt.pause(0.5)
+        if not wait:
+            plt.pause(0.5)
+        else:
+            plt.waitforbuttonpress()
         plt.close()
 
-    def load_data(self):
-        path = os.path.join(os.getcwd(), "data/assets")
+    def load_data(self, p="data/assets"):
+        path = os.path.join(os.getcwd(), p)
 
         for file in os.listdir(path):
             new_path = path

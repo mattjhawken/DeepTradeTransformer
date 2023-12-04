@@ -11,31 +11,32 @@ import os
 
 class Agent:
     def __init__(
-            self,
-            model_name="elysium",
+        self,
+        model_name="elysium",
 
-            embeddings=256,
-            layers=1,
-            heads=4,
-            fwex=256,
-            dropout=0.1,
-            neurons=1024,
-            lr=5e-5,
-            mini_batch_size=32,
+        embeddings=256,
+        layers=1,
+        heads=4,
+        fwex=128,
+        dropout=0.1,
+        neurons=1792,
+        lr=1e-4,
+        gamma=0.9,
+        mini_batch_size=16,
 
-            epsilon_max=1,
-            epsilon_min=0.005,
-            epsilon_decay=0.88,
-            discount=0.98,
-            capacity=10_000,
+        epsilon_max=1,
+        epsilon_min=0.005,
+        epsilon_decay=0.83,
+        discount=0.98,
+        capacity=10_000,
 
-            n_eps=1_000,
-            update_freq=500,
-            show_every=5,
-            render=True,
+        n_eps=1_000,
+        update_freq=500,
+        show_every=5,
+        render=True,
 
-            fee=0.005,
-            trading_period=150,
+        fee=0.005,
+        trading_period=300,
     ):
         self.env = Env(fee, trading_period)
         self.replay_mem = ReplayMemory(capacity)
@@ -59,7 +60,8 @@ class Agent:
             layers=layers,
             heads=heads,
             fwex=fwex,
-            neurons=neurons
+            neurons=neurons,
+            gamma=gamma
         )
         self.policy_net = self.target_net
 
@@ -92,71 +94,79 @@ class Agent:
     def train(self):
 
         model_info = f"====== Model Details: {self.model_name} ======\n" \
-            f"Model Parameters:\n" \
-            f"  Embeddings: {self.target_net.embeddings}\n" \
-            f"  Layers: {self.target_net.layers}\n" \
-            f"  Heads: {self.target_net.heads}\n" \
-            f"  Fwex: {self.target_net.fwex}\n" \
-            f"  Dropout: {self.target_net.dropout}\n" \
-            f"  Neurons: {self.target_net.neurons}\n" \
-            f"  Learning Rate: {self.lr}\n" \
-            f"\n" \
-            f"RL Parameters:\n" \
-            f"  Update Frequency: {self.update_freq}\n" \
-            f"  Decay: {self.decay}\n" \
-            f"  Discount: {self.discount}\n" \
-            f"  Capacity: {self.capacity}\n" \
-            f"\n" \
-            f"Trading Parameters:\n" \
-            f"  Fee: {self.env.fee}\n" \
-            "====================================="
+                     f"\033[1;37mModel Parameters:\033[0m\n" \
+                     f"  \033[1;33mEmbeddings: {self.target_net.embeddings}\033[0m\n" \
+                     f"  \033[1;33mLayers: {self.target_net.layers}\033[0m\n" \
+                     f"  \033[1;33mHeads: {self.target_net.heads}\033[0m\n" \
+                     f"  \033[1;33mFwex: {self.target_net.fwex}\033[0m\n" \
+                     f"  \033[1;33mDropout: {self.target_net.dropout}\033[0m\n" \
+                     f"  \033[1;33mNeurons: {self.target_net.neurons}\033[0m\n" \
+                     f"  \033[1;33mLearning Rate: {self.lr}\033[0m\n" \
+                     f"\n" \
+                     f"\033[1;37mRL Parameters:\033[0m\n" \
+                     f"  \033[1;36mUpdate Frequency: {self.update_freq}\033[0m\n" \
+                     f"  \033[1;36mDecay: {self.decay}\033[0m\n" \
+                     f"  \033[1;36mDiscount: {self.discount}\033[0m\n" \
+                     f"  \033[1;36mCapacity: {self.capacity}\033[0m\n" \
+                     f"\n" \
+                     f"\033[1;37mTrading Parameters:\033[0m\n" \
+                     f"  \033[1;35mFee: {self.env.fee}\033[0m\n" \
+                     "====================================="
+
         print(model_info)
         self.fill_memory()
 
         path = f"models/{self.model_name}"
 
-        with open(path + ".log", "a") as f:
+        with open(path + ".log", "w") as f:
             step_count = 0
             rewards = []
-            data = []
+            cum_rewards = []
             losses = []
 
             try:
                 for ep in range(self.n_eps):
                     done = False
                     state = self.env.reset()
-                    pl = 1
                     loss = None
+                    action_types = []
+                    _rewards = []
 
                     while not done:
-                        action = self.select_actions(state)
+                        action, action_type = self.select_actions(state)
                         next_state, _, reward, done = self.env.step(action)
                         self.replay_mem.store(state, action, reward, next_state)
                         loss = self.learn(step_count)
+                        action_types.append(action_type)
+                        _rewards.append(reward)
 
-                        pl = reward
                         state = next_state
                         step_count += 1
 
-                    # Save train data
-                    reward = round(pl, 4)
-                    data.append([ep, loss, reward])
+                    reward = np.round(np.sum(_rewards), 4)
                     rewards.append(reward)
+
+                    cumulative_rewards, cumulative_reward = self.env.get_cumulative_rewards()
+
+                    cum_rewards.append(cumulative_reward)
                     avg_reward = np.mean(rewards[-25:]).round(4)
+                    avg_cum_reward = np.mean(cum_rewards[-25:]).round(4)
                     lr = self.target_net.optimizer.param_groups[0]['lr']
                     loss = loss.detach().numpy().round(4)
                     losses.append(loss)
                     avg_loss = np.mean(losses[-25:]).round(4)
 
-                    f.write(f"{ep},{reward},{lr:.4e},{loss:.4f},{avg_reward},{avg_loss:.4f},{self.epsilon}\n")
-                    print(f"Ep: {ep}, Reward: {reward}, Lr: {lr:.4e}, Loss: {loss:.4f}, "
-                          f"Reward (avg): {avg_reward},  Loss (avg): {avg_loss:.4f}, Epsilon: {self.epsilon}")
+                    f.write(f"{ep},{reward},{avg_reward},{cumulative_reward:.4f},{lr:.4e},{loss:.4f},{avg_loss:.4f},{self.epsilon}\n")
+                    print(f"Ep: {ep}, Reward: {reward}, \033[93mReward (avg): {avg_reward}\033[0m, "
+                          f"Performance: {cumulative_reward:.3f}, \033[92mPerformance (avg): {avg_cum_reward:.3f}\033[0m, "
+                          f"Lr: {lr:.2e}, Loss: {loss:.4f}, \033[91mLoss (avg) {avg_loss:.3f}\033[0m, Epsilon: {self.epsilon}")
 
                     if ep % self.show_every == 0 and self.render:
-                        self.env.render()
+                        self.env.render(action_types)
 
                     self.update_epsilon(ep)
-                    self.target_net.scheduler.step()
+                    self.policy_net.scheduler.step()
+
             except KeyboardInterrupt:
                 print("Training interrupted, saving model...")
                 self.save(self.model_name)
@@ -180,7 +190,7 @@ class Agent:
                 reward = 0
 
                 while not done:
-                    action = self.select_actions(state)
+                    action, action_type = self.select_actions(state)
                     next_state, _, reward, done = self.env.step(action)
                     state = next_state
 
@@ -193,27 +203,27 @@ class Agent:
 
         if self.random_n != 0:
             self.random_n -= 1
-            return self.random_pos - 1
+            return self.random_pos - 1, 0
         elif random.random() < epsilon:
             # Return random trading values
             # return [random.uniform(0, 0.1), random.uniform(0, 0.2), random.uniform(0, 0.05)]
-            self.random_n = random.sample([1, 3, 5, 9], 1)[0]
+            self.random_n = random.sample([3, 5, 9], 1)[0]
             self.random_pos = random.sample([1, 2], 1)[0]
-            return self.random_pos - 1
+            return self.random_pos - 1, 0
 
         self.policy_net.eval()
         with torch.no_grad():
             state = torch.Tensor(state).unsqueeze(0)
             out = self.policy_net(state).squeeze()
             self.policy_net.train()
-            return torch.argmax(out, dim=0)
+            return torch.argmax(out, dim=0), 1
 
     def fill_memory(self):
-        for _ in tqdm(range(self.capacity // 4), desc="Initializing replay"):
+        for _ in tqdm(range(self.capacity // 3), desc="Initializing replay"):
             state = self.env.reset()
             done = False
             while not done:
-                actions = self.select_actions(state)
+                actions, _ = self.select_actions(state)
                 next_state, action, reward, done = self.env.step(actions)
                 self.replay_mem.store(state, actions, reward, next_state)
                 state = next_state
@@ -221,8 +231,8 @@ class Agent:
     def update_epsilon(self, ep=0):
         self.epsilon = max(self.epsilon_min, round(self.epsilon * self.decay, 4))
 
-        if ep == 10:
-            self.decay = 0.95
+        if ep == 15:
+            self.decay = 0.96
 
     def update_target(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
@@ -271,4 +281,3 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.states)
-

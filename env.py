@@ -1,5 +1,5 @@
-from stock import Stock
 import matplotlib.pyplot as plt
+import numpy as np
 import random
 import pickle
 import os
@@ -14,10 +14,10 @@ class Env:
 
         # Epoch specific trading params
         self.actions = []
+        self.state_actions = [0 for _ in range(7)]
         self.rewards = []
         self.trades = []
         self.in_trade = False
-        self.profit = 1
 
         self.stock = None
         self.ind = 0
@@ -43,11 +43,14 @@ class Env:
         self.rewards = []
         self.trades = []
         self.in_trade = False
-        self.profit = 1
 
         self.start = random.sample(range(1, len(self.stock.closes) - self.trading_period - 1), 1)[0]
         self.end = self.start + self.trading_period
         self.ind = self.start
+
+        # Feed in last 7 actions
+        self.state_actions = [0 for _ in range(7)]
+        self.stock.obs_space[self.ind, :, -1] = self.state_actions
 
         return self.stock.obs_space[self.ind, :, :]
 
@@ -60,25 +63,33 @@ class Env:
         :return: next state, actions, reward, done. For use by trading agent,
         """
         prev_close = self.stock.closes[self.ind - 1]
-        p_change = (self.stock.closes[self.ind] - prev_close) / prev_close
+        p_change = np.log(self.stock.closes[self.ind] / prev_close)
 
         if not self.in_trade:
             if action == 1:
-                p_change = (self.stock.closes[self.ind] - self.stock.opens[self.ind]) / self.stock.opens[self.ind]
+                p_change = np.log(self.stock.closes[self.ind] / self.stock.opens[self.ind])
                 self.in_trade = True
-                self.profit *= (1 - self.fee + p_change)
+                reward = p_change - self.fee
+                self.trades.append((self.ind, 1))
             else:
-                self.profit *= (1 - (p_change/5))
+                reward = -(p_change / 4)
         else:
             if action == 0:
                 self.in_trade = False
-                self.profit *= (1 - self.fee)
+                reward = -self.fee
+                self.trades.append((self.ind, 0))
             else:
-                self.profit *= (1 + p_change)
+                reward = p_change
 
-        self.rewards.append(self.profit)
-        self.actions.append(action)
         self.ind += 1
+
+        self.state_actions = [action for _ in range(7)]
+        for i in range(1, 1 + min(7, len(self.actions))):
+            self.state_actions[-i] = self.actions[-i]
+        self.stock.obs_space[self.ind, :, -1] = self.state_actions
+
+        self.rewards.append(reward)
+        self.actions.append(action)
 
         done = False
         if self.ind >= self.end or self.ind == len(self.stock.closes) - 1:
@@ -86,18 +97,36 @@ class Env:
 
         next_state = self.stock.obs_space[self.ind, :, :]
 
-        return next_state, action, self.profit, done
+        return next_state, action, reward, done
 
-    def render(self, wait=False):
-        fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [2, 1]})
+    def get_cumulative_rewards(self):
+        cumulative_reward = 1
+        cumulative_rewards = []
+        for i in range(len(self.rewards)):
+            if self.actions[i] == 1 or (i > 0 and self.actions[i] != self.actions[i-1]):
+                cumulative_reward *= (1 + self.rewards[i])
+            cumulative_rewards.append(cumulative_reward)
+        return cumulative_rewards, cumulative_reward
+
+    def render(self, action_types=[], wait=False):
         da_range = list(range(self.start, self.end))
 
+        fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [2, 1]})
+
+        ax1.scatter(da_range, self.stock.closes[da_range], c=self.actions, cmap="RdYlGn")
         ax1.set_title(f"{self.stock.ticker}: {self.start}-{self.ind}")
 
-        ax1.scatter(da_range, self.stock.closes[da_range], c=self.actions, cmap="summer")
+        for i in range(len(da_range[:-1])):
+            other_ind = da_range[i]
 
-        ax2.set_title("P/L")
-        ax2.plot(da_range, self.rewards)
+            if action_types:
+                if action_types[i] == 0:
+                    ax1.axvspan(other_ind, other_ind+1, facecolor="whitesmoke", edgecolor="none", alpha=0.5)
+
+        for i, trade in self.trades:
+            ax2.axvline(i, c="r" if trade == 0 else "g")
+
+        ax2.plot(da_range, self.rewards, linestyle='--', color='gray')
 
         plt.draw()
         if not wait:
@@ -106,7 +135,7 @@ class Env:
             plt.waitforbuttonpress()
         plt.close()
 
-    def load_data(self, p="data/assets"):
+    def load_data(self, p="data/train"):
         path = os.path.join(os.getcwd(), p)
 
         for file in os.listdir(path):
@@ -117,17 +146,13 @@ class Env:
                 try:
                     file = open(new_path, "rb")
                     s = pickle.load(file)
+                    # Adding vector for previous action
+                    s.obs_space = np.concatenate([s.obs_space, np.zeros((s.obs_space.shape[0], s.obs_space.shape[1], 1))
+                                                  ], axis=2)
+                    # Temp fix for odd vector size
+                    s.obs_space = s.obs_space[:, :, 1:]
                     self.stocks.append(s)
                 except Exception as e:
                     print(str(e))
 
         print(f"Stocks loaded: {len(self.stocks)}.")
-
-    def get_data(self, tickers):
-        path = os.path.join(os.getcwd(), "data/stonks")
-
-        for ticker in tickers:
-            if ticker.lower() not in path:
-                s = Stock(ticker, "6000d")
-                file = open(os.path.join(path, ticker.lower()), "wb")
-                pickle.dump(s, file)

@@ -28,39 +28,50 @@ class Stock:
         return load_stock(ticker, period, timeframe)
 
     def create_observation_space(self):
+        # Add current day open to state (stock must make decision to trade at beginning of
+        # trading day so you would have the data)
+        _slice = 200
         daily = self.import_data(period="6000d", timeframe="1d")
-        weekly = self.import_data(period="6000d", timeframe="1wk")
-        monthly = self.import_data(period="6000d", timeframe="1mo")
+        # weekly = self.import_data(period="6000d", timeframe="1wk")
+        # monthly = self.import_data(period="6000d", timeframe="1mo")
 
         obs_space = []
 
-        for i in range(800, len(self.closes)):
+        for i in range(_slice, len(self.closes)):
+            # Create a state for each timestep past the defined date
             date = daily.index[i]
 
-            daily_dates = daily.index[daily.index < date]
-            weekly_dates = weekly.index[weekly.index < date]
-            monthly_dates = monthly.index[monthly.index < date]
+            daily_dates = daily.index[daily.index < date][-_slice:]
+            # weekly_dates = weekly.index[weekly.index < date][-60:]
+            # monthly_dates = monthly.index[monthly.index < date]
 
             # Remove last dates as they represent the current candle
             daily_data = daily.loc[daily_dates]
-            weekly_data = weekly.loc[weekly_dates][:-1]
-            monthly_data = monthly.loc[monthly_dates][:-1]
+            # weekly_data = weekly.loc[weekly_dates][:-1]
+            # monthly_data = monthly.loc[monthly_dates][:-1]
 
-            state = np.vstack([
-                daily_data.iloc[-120:].to_numpy()[:, :4],
-                weekly_data.iloc[-48:].to_numpy()[:, :4],
-                monthly_data.iloc[-18:].to_numpy()[:, :4]
-            ])
+            weeks = np.array([daily_dates[i].day_of_week/6 for i in range(len(daily_dates))])
+            months = np.array([daily_dates[i].day/daily_dates[i].daysinmonth for i in range(len(daily_dates))])
+            years = np.array([daily_dates[i].day_of_year/365.25 for i in range(len(daily_dates))])
 
+            state = daily_data.iloc[-_slice:].to_numpy()[:, :4]
             state = (state - state.min()) / (state.max() - state.min())
+
+            state = np.concatenate([
+                state,
+                weeks[-_slice:, np.newaxis],
+                months[-_slice:, np.newaxis],
+                years[-_slice:, np.newaxis]
+            ], axis=1)
+
             obs_space.append(state)
 
-        self.opens = self.opens[800:]
-        self.highs = self.highs[800:]
-        self.lows = self.lows[800:]
-        self.closes = self.closes[800:]
-        self.volume = self.volume[800:]
-        self.obs_space = np.array(obs_space).reshape((-1, 4, 186))
+        self.opens = self.opens[_slice:]
+        self.highs = self.highs[_slice:]
+        self.lows = self.lows[_slice:]
+        self.closes = self.closes[_slice:]
+        self.volume = self.volume[_slice:]
+        self.obs_space = np.array(obs_space).reshape((-1, 7, _slice))
 
     def reverse(self):
         self.opens = self.opens[::-1]

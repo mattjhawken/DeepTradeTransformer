@@ -38,7 +38,7 @@ class Stock:
         obs_space = []
 
         for i in range(_slice, len(self.closes)):
-            # Create a state for each timestep past the defined date
+            # Create a state for each timestep past the defined date (slice)
             date = daily.index[i]
 
             daily_dates = daily.index[daily.index < date][-_slice:]
@@ -55,6 +55,7 @@ class Stock:
             years = np.array([daily_dates[i].day_of_year/365.25 for i in range(len(daily_dates))])
 
             state = daily_data.iloc[-_slice:].to_numpy()[:, :4]
+            # state = np.append(state, self.opens[i])
             state = (state - state.min()) / (state.max() - state.min())
 
             state = np.concatenate([

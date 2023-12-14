@@ -14,20 +14,20 @@ class Agent:
         self,
         model_name="elysium",
 
-        embeddings=256,
+        embeddings=512,
         layers=1,
-        heads=4,
-        fwex=128,
+        heads=8,
+        fwex=256,
         dropout=0.1,
-        neurons=1792,
-        lr=1e-4,
+        neurons=3584,
+        lr=1e-3,
         gamma=0.9,
         mini_batch_size=16,
 
         epsilon_max=1,
         epsilon_min=0.005,
-        epsilon_decay=0.83,
-        discount=0.98,
+        epsilon_decay=0.85,
+        discount=0.99,
         capacity=10_000,
 
         n_eps=1_000,
@@ -36,7 +36,7 @@ class Agent:
         render=True,
 
         fee=0.005,
-        trading_period=300,
+        trading_period=250,
     ):
         self.env = Env(fee, trading_period)
         self.replay_mem = ReplayMemory(capacity)
@@ -70,7 +70,7 @@ class Agent:
         self.show_every = show_every
         self.render = render
 
-        self.random_pos = 0
+        self.random_actions = 0
         self.random_n = 0
 
     def learn(self, step_count):
@@ -121,7 +121,6 @@ class Agent:
         with open(path + ".log", "w") as f:
             step_count = 0
             rewards = []
-            cum_rewards = []
             losses = []
 
             try:
@@ -129,40 +128,31 @@ class Agent:
                     done = False
                     state = self.env.reset()
                     loss = None
-                    action_types = []
-                    _rewards = []
+                    reward = 0
 
                     while not done:
-                        action, action_type = self.select_actions(state)
-                        next_state, _, reward, done = self.env.step(action)
-                        self.replay_mem.store(state, action, reward, next_state)
+                        actions = self.select_actions(state)
+                        next_state, _, reward, done = self.env.step(actions)
+                        self.replay_mem.store(state, actions, reward, next_state)
                         loss = self.learn(step_count)
-                        action_types.append(action_type)
-                        _rewards.append(reward)
+                        reward += reward
 
                         state = next_state
                         step_count += 1
 
-                    reward = np.round(np.sum(_rewards), 4)
                     rewards.append(reward)
-
-                    cumulative_rewards, cumulative_reward = self.env.get_cumulative_rewards()
-
-                    cum_rewards.append(cumulative_reward)
                     avg_reward = np.mean(rewards[-25:]).round(4)
-                    avg_cum_reward = np.mean(cum_rewards[-25:]).round(4)
                     lr = self.target_net.optimizer.param_groups[0]['lr']
                     loss = loss.detach().numpy().round(4)
                     losses.append(loss)
                     avg_loss = np.mean(losses[-25:]).round(4)
 
-                    f.write(f"{ep},{reward},{avg_reward},{cumulative_reward:.4f},{lr:.4e},{loss:.4f},{avg_loss:.4f},{self.epsilon}\n")
-                    print(f"Ep: {ep}, Reward: {reward}, \033[93mReward (avg): {avg_reward}\033[0m, "
-                          f"Performance: {cumulative_reward:.3f}, \033[92mPerformance (avg): {avg_cum_reward:.3f}\033[0m, "
-                          f"Lr: {lr:.2e}, Loss: {loss:.4f}, \033[91mLoss (avg) {avg_loss:.3f}\033[0m, Epsilon: {self.epsilon}")
+                    f.write(f"{ep},{reward},{avg_reward},{lr:.4e},{loss:.4f},{avg_loss:.4f},{self.epsilon}\n")
+                    print(f"Ep: {ep}, Reward: {reward:.4f}, \033[93mReward (avg): {avg_reward}\033[0m, "
+                          f"Lr: {lr:.2e}, Loss: {loss:.3e}, \033[91mLoss (avg) {avg_loss:.3e}\033[0m, Epsilon: {self.epsilon}")
 
                     if ep % self.show_every == 0 and self.render:
-                        self.env.render(action_types)
+                        self.env.render()
 
                     self.update_epsilon(ep)
                     self.policy_net.scheduler.step()
@@ -190,8 +180,8 @@ class Agent:
                 reward = 0
 
                 while not done:
-                    action, action_type = self.select_actions(state)
-                    next_state, _, reward, done = self.env.step(action)
+                    actions, action_type = self.select_actions(state)
+                    next_state, _, reward, done = self.env.step(actions)
                     state = next_state
 
                 rewards.append(reward)
@@ -203,27 +193,27 @@ class Agent:
 
         if self.random_n != 0:
             self.random_n -= 1
-            return self.random_pos - 1, 0
+            return self.random_actions
         elif random.random() < epsilon:
             # Return random trading values
-            # return [random.uniform(0, 0.1), random.uniform(0, 0.2), random.uniform(0, 0.05)]
             self.random_n = random.sample([3, 5, 9], 1)[0]
-            self.random_pos = random.sample([1, 2], 1)[0]
-            return self.random_pos - 1, 0
+            self.random_actions = [random.uniform(0.01, 0.05), random.uniform(0.05, 0.2), random.uniform(0.01, 0.1)]
+            return self.random_actions
 
         self.policy_net.eval()
         with torch.no_grad():
             state = torch.Tensor(state).unsqueeze(0)
-            out = self.policy_net(state).squeeze()
             self.policy_net.train()
-            return torch.argmax(out, dim=0), 1
+            out = self.policy_net(state).squeeze()
+            return out
+            # return torch.argmax(out, dim=0)
 
     def fill_memory(self):
-        for _ in tqdm(range(self.capacity // 3), desc="Initializing replay"):
+        for _ in tqdm(range(self.capacity), desc="Initializing replay"):
             state = self.env.reset()
             done = False
             while not done:
-                actions, _ = self.select_actions(state)
+                actions = self.select_actions(state)
                 next_state, action, reward, done = self.env.step(actions)
                 self.replay_mem.store(state, actions, reward, next_state)
                 state = next_state

@@ -20,6 +20,7 @@ class Env:
         self.in_trade = False
 
         self.stock = None
+        self.len = 0
         self.ind = 0
         self.start = 0
         self.end = 0
@@ -44,89 +45,117 @@ class Env:
         self.trades = []
         self.in_trade = False
 
+        self.len = len(self.stock.closes)
         self.start = random.sample(range(1, len(self.stock.closes) - self.trading_period - 1), 1)[0]
         self.end = self.start + self.trading_period
         self.ind = self.start
 
         # Feed in last 7 actions
-        self.state_actions = [0 for _ in range(7)]
-        self.stock.obs_space[self.ind, :, -1] = self.state_actions
+        # self.state_actions = [0 for _ in range(7)]
+        # self.stock.obs_space[self.ind, :, -1] = self.state_actions
 
         return self.stock.obs_space[self.ind, :, :]
 
-    def step(self, action):
+    def step(self, actions):
         """
         TODO: account for intra-day price swings around trading levels. Use smaller timeframe (1h) to see what was
             triggered first. Currently we are assuming the stop was hit first.
-        :param action: a list of 3 trading targets (entry, target, stop loss) representing percentage
+        :param actions: a list of 3 trading targets (entry, target, stop loss) representing percentage
             difference from previous close (entry, target) and the entry (stop loss).
         :return: next state, actions, reward, done. For use by trading agent,
         """
         prev_close = self.stock.closes[self.ind - 1]
-        p_change = np.log(self.stock.closes[self.ind] / prev_close)
+        entry, target, stop = actions
 
-        if not self.in_trade:
-            if action == 1:
-                p_change = np.log(self.stock.closes[self.ind] / self.stock.opens[self.ind])
-                self.in_trade = True
-                reward = p_change - self.fee
-                self.trades.append((self.ind, 1))
-            else:
-                reward = -(p_change / 4)
-        else:
-            if action == 0:
-                self.in_trade = False
-                reward = -self.fee
-                self.trades.append((self.ind, 0))
-            else:
-                reward = p_change
+        entry = prev_close - (entry * prev_close)
+        target = entry + (target * prev_close)
+        stop = entry - (stop * prev_close)
+        prediction_ind = self.ind
+        exit = 0
 
+        reward = 0
+        done = False
+
+        while True:
+            if self.in_trade:
+                # If hit target
+                if target <= self.stock.highs[self.ind]:
+                    reward += (target - entry) / entry - self.fee
+                    self.in_trade = False
+                    exit = self.ind
+                    self.rewards.append(reward)
+                    break
+                # If hit stop
+                elif stop >= self.stock.lows[self.ind]:
+                    reward += (stop - entry) / entry - self.fee
+                    self.in_trade = False
+                    exit = self.ind
+                    self.rewards.append(reward)
+                    break
+            else:
+                if entry >= self.stock.lows[self.ind]:
+                    reward -= self.fee
+
+                    # In the case that we drop below the stop in the same period
+                    if stop >= self.stock.lows[self.ind]:
+                        reward += (stop - entry) / entry - self.fee
+                        exit = self.ind
+                        self.rewards.append(reward)
+                        break
+                    else:
+                        self.in_trade = True
+                # If price is above current, scrap trade
+                elif target <= self.stock.highs[self.ind]:
+                    reward -= self.fee
+                    exit = self.ind
+                    self.rewards.append(reward)
+                    break
+                else:
+                    reward -= 0.0005
+
+            if self.ind > self.end - 1:
+                exit = self.ind
+                break
+
+            self.rewards.append(reward)
+            self.ind += 1
+
+        self.actions.append((prediction_ind, exit, entry, target, stop))
+
+        # Update environment params
         self.ind += 1
 
-        self.state_actions = [action for _ in range(7)]
-        for i in range(1, 1 + min(7, len(self.actions))):
-            self.state_actions[-i] = self.actions[-i]
-        self.stock.obs_space[self.ind, :, -1] = self.state_actions
+        # self.state_actions = [action for _ in range(7)]
+        # for i in range(1, 1 + min(7, len(self.actions))):
+        #     self.state_actions[-i] = self.actions[-i]
+        # self.stock.obs_space[self.ind, :, -1] = self.state_actions
 
-        self.rewards.append(reward)
-        self.actions.append(action)
-
-        done = False
         if self.ind >= self.end or self.ind == len(self.stock.closes) - 1:
             done = True
 
         next_state = self.stock.obs_space[self.ind, :, :]
 
-        return next_state, action, reward, done
+        return next_state, actions, reward, done
 
-    def get_cumulative_rewards(self):
-        cumulative_reward = 1
-        cumulative_rewards = []
-        for i in range(len(self.rewards)):
-            if self.actions[i] == 1 or (i > 0 and self.actions[i] != self.actions[i-1]):
-                cumulative_reward *= (1 + self.rewards[i])
-            cumulative_rewards.append(cumulative_reward)
-        return cumulative_rewards, cumulative_reward
-
-    def render(self, action_types=[], wait=False):
+    def render(self, wait=False):
         da_range = list(range(self.start, self.end))
 
-        fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [2, 1]})
+        fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [3, 1]})
 
-        ax1.scatter(da_range, self.stock.closes[da_range], c=self.actions, cmap="RdYlGn")
-        ax1.set_title(f"{self.stock.ticker}: {self.start}-{self.ind}")
+        for i in da_range:
+            oc = (self.stock.closes[i], self.stock.opens[i])
+            hl = (self.stock.highs[i], self.stock.lows[i])
+            ax1.plot((i, i), oc, c="r" if oc[1] > oc[0] else "g", linewidth=1.5)
+            ax1.plot((i, i), hl, linewidth=0.3)
 
-        for i in range(len(da_range[:-1])):
-            other_ind = da_range[i]
+        for start, end, e, t, s in self.actions:
+            ax1.plot((start, end), (e, e), c="b")
+            ax1.plot((start, end), (t, t), c="g")
+            ax1.plot((start, end), (s, s), c="r")
 
-            if action_types:
-                if action_types[i] == 0:
-                    ax1.axvspan(other_ind, other_ind+1, facecolor="whitesmoke", edgecolor="none", alpha=0.5)
+        ax1.set_title(f"{self.stock.ticker}: {self.stock.dates[self.start]}-{self.stock.dates[self.ind]}")
 
-        for i, trade in self.trades:
-            ax2.axvline(i, c="r" if trade == 0 else "g")
-
-        ax2.plot(da_range, self.rewards, linestyle='--', color='gray')
+        ax2.plot(da_range, self.rewards, linestyle='--', c='gray')
 
         plt.draw()
         if not wait:

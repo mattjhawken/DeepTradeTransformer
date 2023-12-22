@@ -30,7 +30,7 @@ class DQTN(nn.Module):
 
         self.loss = None
         self.optimizer = optim.Adam(self.parameters(), lr=lr)
-        self.scheduler = CosineAnnealingLR(self.optimizer, 100, 1e-6)
+        # self.scheduler = CosineAnnealingLR(self.optimizer, 200, 1e-6)
 
     def forward(self, x):
         x = self.flat(self.encoder(x))

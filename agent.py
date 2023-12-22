@@ -16,17 +16,17 @@ class Agent:
 
         embeddings=512,
         layers=1,
-        heads=8,
-        fwex=256,
+        heads=4,
+        fwex=512,
         dropout=0.1,
         neurons=3584,
-        lr=1e-3,
+        lr=2e-4,
         gamma=0.9,
         mini_batch_size=16,
 
         epsilon_max=1,
         epsilon_min=0.005,
-        epsilon_decay=0.85,
+        epsilon_decay=0.9,
         discount=0.99,
         capacity=10_000,
 
@@ -155,7 +155,7 @@ class Agent:
                         self.env.render()
 
                     self.update_epsilon(ep)
-                    self.policy_net.scheduler.step()
+                    # self.policy_net.scheduler.step()
 
             except KeyboardInterrupt:
                 print("Training interrupted, saving model...")
@@ -180,7 +180,7 @@ class Agent:
                 reward = 0
 
                 while not done:
-                    actions, action_type = self.select_actions(state)
+                    actions = self.select_actions(state)
                     next_state, _, reward, done = self.env.step(actions)
                     state = next_state
 
@@ -197,7 +197,7 @@ class Agent:
         elif random.random() < epsilon:
             # Return random trading values
             self.random_n = random.sample([3, 5, 9], 1)[0]
-            self.random_actions = [random.uniform(0.01, 0.05), random.uniform(0.05, 0.2), random.uniform(0.01, 0.1)]
+            self.random_actions = [random.uniform(0.01, 0.1), random.uniform(0.05, 0.2), random.uniform(0.01, 0.1)]
             return self.random_actions
 
         self.policy_net.eval()
@@ -222,7 +222,7 @@ class Agent:
         self.epsilon = max(self.epsilon_min, round(self.epsilon * self.decay, 4))
 
         if ep == 15:
-            self.decay = 0.96
+            self.decay = 0.95
 
     def update_target(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())

@@ -1,4 +1,4 @@
-## A Deep RL Transformer Based Trading Agent in PyTorch
+## A Deep-RL Transformer-Based Trading Agent in PyTorch
 
 This repository contains a trading agent that leverages deep-Q learning (RL) and an encoder-based transformer architectures, built using PyTorch.
 

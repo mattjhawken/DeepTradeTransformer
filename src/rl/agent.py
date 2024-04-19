@@ -1,5 +1,5 @@
-from dqtn import DQTN
-from env import Env
+from src.ml.dqtn import DQTN
+from src.rl.env import Env
 
 from tqdm import tqdm
 import numpy as np

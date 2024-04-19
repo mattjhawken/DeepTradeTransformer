@@ -6,6 +6,9 @@ from torch.optim.lr_scheduler import StepLR
 
 
 class DQTN(nn.Module):
+    """
+    An encoder-only transformer
+    """
     def __init__(self, dims, lr, dropout, embeddings, layers, heads, fwex, neurons, gamma):
         super(DQTN, self).__init__()
 

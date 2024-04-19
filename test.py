@@ -1,5 +1,5 @@
-from stock import Stock
-from agent import Agent
+from src.stock.stock import Stock
+from src.rl.agent import Agent
 import matplotlib.pyplot as plt
 import pickle
 

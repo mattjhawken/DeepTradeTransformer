@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 import torch.optim as optim
 from torch import nn
-from encoder import Encoder
+from src.ml.encoder import Encoder
 from torch.optim.lr_scheduler import StepLR
 
 
@@ -23,7 +23,7 @@ class DQTN(nn.Module):
         self.neurons = neurons
         self.gamma = gamma
 
-        self.encoder = Encoder(embeddings, layers, heads, fwex, dropout, 200)
+        self.encoder = Encoder(embeddings, layers, heads, fwex, dropout, 364)
 
         self.flat = nn.Flatten()
         self.fc1 = nn.Linear(neurons, neurons // 4)

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from src.stock.stock import Stock
 import numpy as np
 import random
 import pickle
@@ -6,8 +7,9 @@ import os
 
 
 class Env:
-    def __init__(self, fee=0.001, trading_period=100):
+    def __init__(self, tickers=None, fee=0.001, trading_period=100):
         # General trading params
+        self.tickers = tickers
         self.fee = fee
         self.trading_period = trading_period
         self.stocks = []
@@ -24,7 +26,7 @@ class Env:
         self.start = 0
         self.end = 0
 
-        self.load_data()
+        self.load_data(tickers=tickers)
         self.reset()
 
     def load_stock(self, stock):
@@ -48,9 +50,9 @@ class Env:
         self.end = self.start + self.trading_period
         self.ind = self.start
 
-        # Feed in last 7 actions
-        self.state_actions = [0 for _ in range(7)]
-        self.stock.obs_space[self.ind, :, -1] = self.state_actions
+        # # Feed in last 7 actions
+        # self.state_actions = [0 for _ in range(7)]
+        # self.stock.obs_space[self.ind, :, -1] = self.state_actions
 
         return self.stock.obs_space[self.ind, :, :]
 
@@ -83,10 +85,10 @@ class Env:
 
         self.ind += 1
 
-        self.state_actions = [action for _ in range(7)]
-        for i in range(1, 1 + min(7, len(self.actions))):
-            self.state_actions[-i] = self.actions[-i]
-        self.stock.obs_space[self.ind, :, -1] = self.state_actions
+        # self.state_actions = [action for _ in range(7)]
+        # for i in range(1, 1 + min(7, len(self.actions))):
+        #     self.state_actions[-i] = self.actions[-i]
+        # self.stock.obs_space[self.ind, :, -1] = self.state_actions
 
         self.rewards.append(reward)
         self.actions.append(action)
@@ -135,24 +137,28 @@ class Env:
             plt.waitforbuttonpress()
         plt.close()
 
-    def load_data(self, p="data/train"):
-        path = os.path.join(os.getcwd(), p)
+    def load_data(self, p="data/train", tickers=None):
+        if tickers is None:
+            path = os.path.join(os.getcwd(), p)
+            for file in os.listdir(path):
+                new_path = path
+                if ".DS" not in file:
+                    new_path = os.path.join(new_path, file)
 
-        for file in os.listdir(path):
-            new_path = path
-            if ".DS" not in file:
-                new_path = os.path.join(new_path, file)
-
-                try:
-                    file = open(new_path, "rb")
-                    s = pickle.load(file)
-                    # Adding vector for previous action
-                    s.obs_space = np.concatenate([s.obs_space, np.zeros((s.obs_space.shape[0], s.obs_space.shape[1], 1))
-                                                  ], axis=2)
-                    # Temp fix for odd vector size
-                    s.obs_space = s.obs_space[:, :, 1:]
-                    self.stocks.append(s)
-                except Exception as e:
-                    print(str(e))
+                    try:
+                        file = open(new_path, "rb")
+                        s = pickle.load(file)
+                        # Adding vector for previous action
+                        s.obs_space = np.concatenate([s.obs_space, np.zeros((s.obs_space.shape[0], s.obs_space.shape[1], 1))
+                                                      ], axis=2)
+                        # Temp fix for odd vector size
+                        s.obs_space = s.obs_space[:, :, 1:]
+                        self.stocks.append(s)
+                    except Exception as e:
+                        print(str(e))
+        else:
+            for t in tickers:
+                s = Stock(t)
+                self.stocks.append(s)
 
         print(f"Stocks loaded: {len(self.stocks)}.")

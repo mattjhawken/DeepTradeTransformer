@@ -1,4 +1,4 @@
-from data_center import load_stock
+from src.stock.data_center import load_stock
 import numpy as np
 
 
@@ -7,7 +7,7 @@ class Stock:
     Stock object that carries price and associated info, observation space for NN,
     along with methods for calculating various indicators
     """
-    def __init__(self, ticker, period="3000d", timeframe="1d", window=365):
+    def __init__(self, ticker, period="6000d", timeframe="1d", window=364):
         self.ticker = ticker
         self.timeframe = timeframe
         self.period = period
@@ -27,7 +27,7 @@ class Stock:
         self.create_observation_space()
 
     def import_data(self, ticker=None, period=None, timeframe=None):
-        # Import data with Stock params if none are specified
+        """Import data from yfinance with Stock params if none are specified"""
         ticker = self.ticker if not ticker else ticker
         period = self.period if not period else period
         timeframe = self.timeframe if not timeframe else timeframe
@@ -35,41 +35,30 @@ class Stock:
         return load_stock(ticker, period, timeframe)
 
     def create_observation_space(self):
-        # Add current day open to state (stock must make decision to trade at beginning of
-        # trading day so you would have the data)
-        daily = self.import_data(period="6000d", timeframe="1d")
-        # weekly = self.import_data(period="6000d", timeframe="1wk")
-        # monthly = self.import_data(period="6000d", timeframe="1mo")
-
+        """Create normalized price data for RL-environment. """
+        daily = self.import_data(timeframe="1d")
         obs_space = []
 
         for i in range(self.window, len(self.closes)):
             # Create a state for each timestep past the defined date
             date = daily.index[i]
-
             daily_dates = daily.index[daily.index < date][-self.window:]
-            # weekly_dates = weekly.index[weekly.index < date][-60:]
-            # monthly_dates = monthly.index[monthly.index < date]
-
-            # Remove last dates as they represent the current candle?
             daily_data = daily.loc[daily_dates]
-            # weekly_data = weekly.loc[weekly_dates][:-1]
-            # monthly_data = monthly.loc[monthly_dates][:-1]
 
-            # These values are 0-1 scaled representations of day of week, day of month, and day of year.
-            # Potentially useful information for the agent as humans look at daily, weekly, monthly charts
-            weeks = np.array([daily_dates[i].day_of_week/6 for i in range(len(daily_dates))])
-            months = np.array([daily_dates[i].day/daily_dates[i].daysinmonth for i in range(len(daily_dates))])
-            years = np.array([daily_dates[i].day_of_year/365.25 for i in range(len(daily_dates))])
+            # # These values are 0-1 scaled representations of day of week, day of month, and day of year.
+            # # Potentially useful information for the agent as humans look at daily, weekly, monthly charts
+            # weeks = np.array([daily_dates[i].day_of_week/6 for i in range(len(daily_dates))])
+            # months = np.array([daily_dates[i].day/daily_dates[i].daysinmonth for i in range(len(daily_dates))])
+            # years = np.array([daily_dates[i].day_of_year/365.25 for i in range(len(daily_dates))])
 
             state = daily_data.iloc[-self.window:].to_numpy()[:, :4]
             state = (state - state.min()) / (state.max() - state.min())
 
             state = np.concatenate([
                 state,
-                weeks[-self.window:, np.newaxis],
-                months[-self.window:, np.newaxis],
-                years[-self.window:, np.newaxis]
+                # weeks[-self.window:, np.newaxis],
+                # months[-self.window:, np.newaxis],
+                # years[-self.window:, np.newaxis]
             ], axis=1)
 
             obs_space.append(state)
@@ -79,7 +68,7 @@ class Stock:
         self.lows = self.lows[self.window:]
         self.closes = self.closes[self.window:]
         self.volume = self.volume[self.window:]
-        self.obs_space = np.array(obs_space).reshape((-1, 7, self.window))
+        self.obs_space = np.array(obs_space).reshape((-1, 4, self.window))
 
     def reverse(self):
         """Method to reverse the entire stock data, potentially helps balance training"""

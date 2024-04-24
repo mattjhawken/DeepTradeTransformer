@@ -12,14 +12,15 @@ import os
 class Agent:
     def __init__(
         self,
-        model_name="elysium",
+        model_name="transforming-stonks",
+        tickers=None,
 
         embeddings=256,
         layers=1,
         heads=4,
         fwex=128,
         dropout=0.1,
-        neurons=1792,
+        neurons=1024,
         lr=1e-4,
         gamma=0.9,
         mini_batch_size=16,
@@ -38,7 +39,7 @@ class Agent:
         fee=0.005,
         trading_period=300,
     ):
-        self.env = Env(fee, trading_period)
+        self.env = Env(tickers, fee, trading_period)
         self.replay_mem = ReplayMemory(capacity)
         self.model_name = model_name
 

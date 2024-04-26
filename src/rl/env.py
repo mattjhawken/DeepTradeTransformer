@@ -8,7 +8,7 @@ import os
 
 class Env:
     def __init__(self, tickers=None, fee=0.001, trading_period=100):
-        # General trading params
+        # Initializes the trading environment with optional tickers, a trading fee, and a specified trading period.
         self.tickers = tickers
         self.fee = fee
         self.trading_period = trading_period
@@ -30,11 +30,13 @@ class Env:
         self.reset()
 
     def load_stock(self, stock):
+        # Sets the current stock to the provided stock and resets the environment state.
         self.stock = stock
         state = self.reset(flip=False, stock=False)
         return state
 
     def reset(self, flip=True, stock=True):
+        # Resets the environment to a new trading session. Optionally flips the stock data and selects a random stock.
         if stock:
             self.stock = random.choice(self.stocks)
 
@@ -58,11 +60,9 @@ class Env:
 
     def step(self, action):
         """
-        TODO: account for intra-day price swings around trading levels. Use smaller timeframe (1h) to see what was
-            triggered first. Currently we are assuming the stop was hit first.
-        :param action: a list of 3 trading targets (entry, target, stop loss) representing percentage
-            difference from previous close (entry, target) and the entry (stop loss).
-        :return: next state, actions, reward, done. For use by trading agent,
+        Advances the environment by one step based on the action taken. Calculates the change in price as reward and manages trades.
+        :param action: The trading action to take (e.g., buy, hold, sell).
+        :return: next state, action, reward, and a boolean indicating if the session is done.
         """
         prev_close = self.stock.closes[self.ind - 1]
         p_change = np.log(self.stock.closes[self.ind] / prev_close)
@@ -102,15 +102,18 @@ class Env:
         return next_state, action, reward, done
 
     def get_cumulative_rewards(self):
+        # Computes the cumulative rewards over the trading period. (current not used for training)
         cumulative_reward = 1
         cumulative_rewards = []
         for i in range(len(self.rewards)):
             if self.actions[i] == 1 or (i > 0 and self.actions[i] != self.actions[i-1]):
                 cumulative_reward *= (1 + self.rewards[i])
             cumulative_rewards.append(cumulative_reward)
+
         return cumulative_rewards, cumulative_reward
 
     def render(self, action_types=[], wait=False):
+        # Renders the stock prices and trades over the trading period.
         da_range = list(range(self.start, self.end))
 
         fig, [ax1, ax2] = plt.subplots(2, figsize=(12, 8), gridspec_kw={'height_ratios': [2, 1]})

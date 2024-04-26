@@ -39,10 +39,16 @@ class Agent:
         fee=0.005,
         trading_period=300,
     ):
+        """
+           Initializes the Agent with specific configuration for its trading model, learning parameters,
+           and environment settings.
+           """
+        # Set up the trading environment
         self.env = Env(tickers, fee, trading_period)
         self.replay_mem = ReplayMemory(capacity)
         self.model_name = model_name
 
+        # Learning and exploration parameters
         self.epsilon = epsilon_max
         self.epsilon_min = epsilon_min
         self.decay = epsilon_decay
@@ -53,6 +59,7 @@ class Agent:
         self.lr = lr
         self.discount = discount
 
+        # Initialize neural network models for policy and target
         self.target_net = DQTN(
             dims=self.env.stock.obs_space.shape,
             lr=lr,
@@ -75,6 +82,9 @@ class Agent:
         self.random_n = 0
 
     def learn(self, step_count):
+        """
+        Performs a single step of training using a mini-batch from the replay memory.
+        """
         states, actions, rewards, next_states = self.replay_mem.sample(self.mini_batch_size)
         next_states = torch.Tensor(next_states)
         rewards = torch.Tensor(rewards).unsqueeze(-1)
@@ -93,7 +103,10 @@ class Agent:
         return self.policy_net.loss
 
     def train(self):
-
+        """
+        Conducts the training loop over a set number of episodes, managing exploration,
+        updates, and logging.
+        """
         model_info = f"====== Model Details: {self.model_name} ======\n" \
                      f"\033[1;37mModel Parameters:\033[0m\n" \
                      f"  \033[1;33mEmbeddings: {self.target_net.embeddings}\033[0m\n" \
@@ -200,6 +213,9 @@ class Agent:
         return rewards
 
     def select_actions(self, state):
+        """
+        Selects actions based on the current state of the environment, using an epsilon-greedy strategy for exploration.
+        """
         epsilon = max(self.epsilon, self.epsilon_min)
 
         if self.random_n != 0:
@@ -220,6 +236,9 @@ class Agent:
             return torch.argmax(out, dim=0), 1
 
     def fill_memory(self):
+        """
+        Pre-fills the replay memory with initial experiences by interacting with the environment using random actions.
+        """
         for _ in tqdm(range(self.capacity // 3), desc="Initializing replay"):
             state = self.env.reset()
             done = False
@@ -230,24 +249,40 @@ class Agent:
                 state = next_state
 
     def update_epsilon(self, ep=0):
+        """
+         Updates the epsilon value for exploration based on the decay rate.
+        """
         self.epsilon = max(self.epsilon_min, round(self.epsilon * self.decay, 4))
 
         if ep == 15:
             self.decay = 0.96
 
     def update_target(self):
+        """
+        Updates the target network with weights from the policy network.
+        """
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
     def save(self, model_name):
+        """
+        Saves the model state to disk.
+        """
         torch.save(self.policy_net.state_dict(), f"models/{model_name}")
 
     def load(self, model_name):
+        """
+        Loads a model state from disk and sets the network to evaluation mode.
+        """
+
         self.policy_net.load_state_dict(torch.load(f"models/{model_name}"))
         self.policy_net.eval()
 
 
 class ReplayMemory:
     def __init__(self, capacity):
+        """
+        Initializes the ReplayMemory with a given capacity.
+        """
         self.capacity = capacity
         self.device = "gpu" if torch.cuda.is_available() else "cpu"
         self.states = []
@@ -257,6 +292,9 @@ class ReplayMemory:
         self.ind = 0
 
     def store(self, states, actions, rewards, next_states):
+        """
+        Stores or replaces an experience in the memory.
+        """
         if len(self.states) < self.capacity:
             self.states.append(states)
             self.actions.append(actions)
@@ -271,6 +309,9 @@ class ReplayMemory:
         self.ind = (self.ind + 1) % self.capacity
 
     def sample(self, batchsize):
+        """
+        Randomly samples a batch of experiences from memory.
+        """
         indices_to_sample = random.sample(range(len(self.states)), k=batchsize)
 
         states = np.array(self.states)[indices_to_sample]

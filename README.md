@@ -2,7 +2,7 @@
 
 This repository contains a trading agent that leverages deep-Q learning (RL) and an encoder-based transformer, built in PyTorch.
 
-### Quickstart Guide
+## Quickstart Guide
 
 #### Requirements
 - Python 3.9 or later
@@ -34,8 +34,11 @@ python main.py
 ### Key Input Parameters
 The agent's behavior is controlled by several key parameters, detailed below:
 
-- **tickers**: List of stock symbols to be used for trading simulations, e.g., ["AAPL", "GOOGL"].
-- **model_name**: A unique identifier for saving/loading trained models.
+Sure, I'll categorize the parameters into sections focusing on Machine Learning (ML) parameters, Reinforcement Learning (RL) parameters, and Trading parameters to provide a clearer and more organized presentation:
+
+### Key Input Parameters
+
+#### Machine Learning Parameters
 - **embeddings**: The size of the embedding layer in the transformer model.
 - **layers**: The number of transformer layers used in the model.
 - **heads**: The number of attention heads in each transformer layer.
@@ -43,6 +46,8 @@ The agent's behavior is controlled by several key parameters, detailed below:
 - **dropout**: Dropout rate used in the transformer model to prevent overfitting.
 - **neurons**: The number of neurons in the fully connected layers of the network.
 - **lr (Learning Rate)**: Controls how much to change the model in response to the estimated error each time the model weights are updated.
+
+#### Reinforcement Learning Parameters
 - **gamma**: The discount factor used in the reinforcement learning update rule.
 - **mini_batch_size**: Size of batches taken from the replay memory for training.
 - **epsilon_max**: Initial value of ε for the ε-greedy policy, controlling exploration.
@@ -54,9 +59,12 @@ The agent's behavior is controlled by several key parameters, detailed below:
 - **update_freq**: Frequency (in steps) at which the target network is updated.
 - **show_every**: Frequency (in episodes) at which training episodes are rendered/visualized.
 - **render**: Boolean flag to turn on/off rendering of the trading environment.
+
+#### Trading Parameters
+- **tickers**: List of stock symbols to be used for trading simulations, e.g., ["AAPL", "GOOGL"].
+- **model_name**: A unique identifier for saving/loading trained models.
 - **fee**: Trading fee percentage used in simulations.
 - **trading_period**: Number of time steps each trading episode lasts.
 
 ### Disclaimer:
 This project was not intended for public use, as a result the degree of commenting and organization is likely horrible (non-existent). I will try and go through it ASAP to clean it up and make some improvements.
-```

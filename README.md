@@ -34,10 +34,6 @@ python main.py
 ### Key Input Parameters
 The agent's behavior is controlled by several key parameters, detailed below:
 
-Sure, I'll categorize the parameters into sections focusing on Machine Learning (ML) parameters, Reinforcement Learning (RL) parameters, and Trading parameters to provide a clearer and more organized presentation:
-
-### Key Input Parameters
-
 #### Machine Learning Parameters
 - **embeddings**: The size of the embedding layer in the transformer model.
 - **layers**: The number of transformer layers used in the model.
